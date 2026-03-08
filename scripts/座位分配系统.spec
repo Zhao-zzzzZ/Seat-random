@@ -5,7 +5,7 @@ from pathlib import Path
 项目根目录 = Path(SPECPATH).parent
 
 a = Analysis(
-    [str(项目根目录 / '座位分配.py')],
+    [str(项目根目录 / 'src' / '座位分配.py')],
     pathex=[str(项目根目录)],
     binaries=[],
     datas=[],

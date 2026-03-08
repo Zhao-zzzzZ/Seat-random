@@ -5,6 +5,7 @@ import shutil
 项目根目录 = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 数据目录 = os.path.join(项目根目录, "data")
 输出目录 = os.path.join(项目根目录, "dist")
+源码入口 = os.path.join(项目根目录, "src", "座位分配.py")
 
 def 清理构建文件():
     """清理之前的构建文件"""
@@ -19,7 +20,7 @@ def 打包程序():
     清理构建文件()
 
     PyInstaller.__main__.run([
-        os.path.join(项目根目录, '座位分配.py'),
+        源码入口,
         '--name=座位分配系统',
         '--windowed',
         '--onefile',

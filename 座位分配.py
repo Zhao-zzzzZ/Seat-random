@@ -12,17 +12,16 @@ try:
 except ImportError:
     EXCEL_AVAILABLE = False
 
-# 获取资源路径，兼容PyInstaller打包后的情况
+def 获取项目根路径():
+    """获取项目根目录或打包后可执行文件所在目录"""
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+
 def 获取资源路径(相对路径):
-    """获取资源文件的绝对路径，兼容开发环境和打包后的环境"""
-    if getattr(sys, 'frozen', False):
-        # 如果是打包后的环境
-        基础路径 = sys._MEIPASS
-    else:
-        # 如果是开发环境
-        基础路径 = os.path.dirname(os.path.abspath(__file__))
-    
-    return os.path.join(基础路径, 相对路径)
+    """统一从 data 目录读取或写入资源文件"""
+    return os.path.join(获取项目根路径(), "data", 相对路径)
 
 class 座位分配:
     """班级座位随机分配系统主类
@@ -344,7 +343,7 @@ class 座位分配:
         """从学生名单文件加载学生列表
         
         功能:
-        - 仅从学生名单.json文件加载学生列表
+        - 仅从 data/学生名单.json 文件加载学生列表
         - 文件不存在、为空或格式错误时直接报错
         
         返回:
@@ -389,20 +388,14 @@ class 座位分配:
         """从JSON文件加载特殊安排
         
         功能:
-        - 尝试从特殊安排.json文件加载特殊座位安排
+        - 尝试从 data/特殊安排.json 文件加载特殊座位安排
         - 如果文件不存在或格式错误，则使用空字典
-        - 兼容PyInstaller打包后的环境
         
         返回:
             无返回值，但会更新self.指定排数安排
         """
         特殊安排文件 = "特殊安排.json"
-        
-        # 尝试获取打包后的路径
-        try:
-            特殊安排路径 = 获取资源路径(特殊安排文件)
-        except:
-            特殊安排路径 = 特殊安排文件
+        特殊安排路径 = 获取资源路径(特殊安排文件)
             
         if not os.path.exists(特殊安排路径):
             # 如果文件不存在，创建一个空的特殊安排文件
@@ -444,12 +437,8 @@ class 座位分配:
         特殊安排文件 = "特殊安排.json"
         
         try:
-            # 尝试获取打包后的路径
-            try:
-                特殊安排路径 = 获取资源路径(特殊安排文件)
-            except:
-                特殊安排路径 = 特殊安排文件
-            
+            os.makedirs(os.path.dirname(获取资源路径(特殊安排文件)), exist_ok=True)
+            特殊安排路径 = 获取资源路径(特殊安排文件)
             with open(特殊安排路径, "w", encoding="utf-8") as f:
                 json.dump(数据, f, ensure_ascii=False, indent=4)
         except Exception as e:
@@ -543,7 +532,8 @@ class 座位分配:
     def 加载管理员密码(self):
         """从配置文件加载管理员密码"""
         try:
-            with open("配置.json", "r", encoding="utf-8") as f:
+            配置路径 = 获取资源路径("配置.json")
+            with open(配置路径, "r", encoding="utf-8") as f:
                 配置 = json.load(f)
                 return 配置.get("管理员密码", "admin")  # 默认密码为admin
         except:

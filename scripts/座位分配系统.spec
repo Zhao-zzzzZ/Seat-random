@@ -1,11 +1,14 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+from pathlib import Path
+
+项目根目录 = Path(SPECPATH).parent
 
 a = Analysis(
-    ['座位分配.py'],
-    pathex=[],
+    [str(项目根目录 / '座位分配.py')],
+    pathex=[str(项目根目录)],
     binaries=[],
-    datas=[('特殊安排.json', '.'), ('配置.json', '.')],
+    datas=[],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -35,6 +38,6 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    version='version.txt',
+    version=str(项目根目录 / 'scripts' / 'version.txt'),
     uac_admin=True,
 )

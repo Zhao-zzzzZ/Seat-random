@@ -12,17 +12,16 @@ try:
 except ImportError:
     EXCEL_AVAILABLE = False
 
-# 获取资源路径，兼容PyInstaller打包后的情况
+def 获取项目根路径():
+    """获取项目根目录或打包后可执行文件所在目录"""
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+
 def 获取资源路径(相对路径):
-    """获取资源文件的绝对路径，兼容开发环境和打包后的环境"""
-    if getattr(sys, 'frozen', False):
-        # 如果是打包后的环境
-        基础路径 = sys._MEIPASS
-    else:
-        # 如果是开发环境
-        基础路径 = os.path.dirname(os.path.abspath(__file__))
-    
-    return os.path.join(基础路径, 相对路径)
+    """统一从 data 目录读取或写入资源文件"""
+    return os.path.join(获取项目根路径(), "data", 相对路径)
 
 class 座位分配:
     """班级座位随机分配系统主类
@@ -47,8 +46,7 @@ class 座位分配:
         """
         self.root = root
         self.root.title("随机座位分配")
-        self.root.geometry("650x480")  # 调整窗口尺寸，保持美观比例
-        self.root.resizable(False, False)  # 禁止调整窗口大小，保持布局美观
+        self.root.resizable(True, True)
         
         # 设置学生名单
         self.学生名单 = self.加载学生名单()
@@ -62,6 +60,15 @@ class 座位分配:
         
         # 记录当前分配结果
         self.当前分配结果 = {}  # 学生 -> (行, 列)
+        self.座位到学生 = {}  # (行, 列) -> 学生
+
+        # 缓存所有有效座位，避免重复计算
+        self.有效座位 = [
+            (i, j)
+            for i in range(self.座位行数)
+            for j in range(self.座位列数)
+            if not ((j == 0 or j == 5) and i == 5)
+        ]
         
         # 用于记录点击状态
         self.第一次点击 = None  # 记录第一次点击的学生和位置
@@ -75,81 +82,183 @@ class 座位分配:
         
         # 创建UI元素
         self.创建界面()
+        self.自适应窗口大小()
         
         # 绑定快捷键
         self.root.bind("<Control-Alt-s>", self.显示设置按钮)
     
     def 创建界面(self):
-        # 创建标题
-        标题框架 = tk.Frame(self.root)
-        标题框架.pack(fill=tk.X, pady=(5, 5))  # 减少顶部间距
-        
-        标题标签 = tk.Label(标题框架, text="班级座位随机分配系统", font=("微软雅黑", 14, "bold"))
-        标题标签.pack(pady=5)  # 减少标题上下间距
-        
-        # 创建框架
-        self.主框架 = tk.Frame(self.root)
-        self.主框架.pack(pady=2)  # 减少间距
-        
-        # 创建控制面板
-        self.控制面板 = tk.Frame(self.root)
-        self.控制面板.pack(pady=2)  # 减少间距
-        
-        # 添加按钮
-        self.随机分配按钮 = tk.Button(self.控制面板, text="随机分配座位", command=self.随机分配座位, 
-                              font=("微软雅黑", 10))
-        self.随机分配按钮.grid(row=0, column=0, padx=5)
-        
-        # 添加导出Excel按钮
+        """创建 Win11 风格界面"""
+        self.root.configure(bg="#F3F3F3")
+
+        # 统一样式参数
+        self.主背景色 = "#F3F3F3"
+        self.卡片背景色 = "#FFFFFF"
+        self.主强调色 = "#0078D4"
+        self.次要文字色 = "#5F5F5F"
+        self.座位默认背景 = "#FFFFFF"
+        self.座位选中背景 = "#DCEBFA"
+        self.座位卡片宽度 = 92
+        self.座位卡片高度 = 54
+        self.标题字体 = ("Segoe UI", 18, "bold")
+        self.正文粗体 = ("Segoe UI", 10, "bold")
+        self.正文常规 = ("Segoe UI", 10)
+        self.座位字体 = ("Segoe UI", 9)
+
+        # 顶部标题区域
+        顶部框架 = tk.Frame(self.root, bg=self.主背景色)
+        顶部框架.pack(fill=tk.X, padx=16, pady=(14, 8))
+
+        标题标签 = tk.Label(
+            顶部框架,
+            text="班级座位随机分配系统",
+            font=self.标题字体,
+            bg=self.主背景色,
+            fg="#202020"
+        )
+        标题标签.pack(anchor="w")
+
+        副标题标签 = tk.Label(
+            顶部框架,
+            text="Windows 11 风格 · 清晰布局 · 高效操作",
+            font=("Segoe UI", 9),
+            bg=self.主背景色,
+            fg=self.次要文字色
+        )
+        副标题标签.pack(anchor="w", pady=(2, 0))
+
+        # 控制区卡片
+        self.控制面板 = tk.Frame(self.root, bg=self.卡片背景色, bd=0, highlightthickness=1, highlightbackground="#E6E6E6")
+        self.控制面板.pack(fill=tk.X, padx=16, pady=(0, 10), ipady=8)
+
+        self.随机分配按钮 = self.创建按钮(self.控制面板, "随机分配座位", self.随机分配座位, 主要=True)
+        self.随机分配按钮.grid(row=0, column=0, padx=(12, 8), pady=6)
+
         if EXCEL_AVAILABLE:
-            self.导出按钮 = tk.Button(self.控制面板, text="导出Excel", command=self.导出到Excel,
-                                font=("微软雅黑", 10))
-            self.导出按钮.grid(row=0, column=1, padx=5)
-        
-        # 创建设置按钮（默认隐藏）
-        self.设置排数按钮 = tk.Button(self.控制面板, text="设置指定排数", command=self.设置指定排数, 
-                             font=("微软雅黑", 10))
-        self.清除设置按钮 = tk.Button(self.控制面板, text="清除所有设置", command=self.清除设置, 
-                             font=("微软雅黑", 10))
-        
-        # 创建座位显示区域
-        self.座位框架 = tk.Frame(self.root, bd=2, relief=tk.GROOVE)
-        self.座位框架.pack(pady=5, padx=10)  # 减少上下间距
-        
-        # 添加讲台标识（移到上方）
-        讲台标签 = tk.Label(self.座位框架, text="讲台", font=("微软雅黑", 10, "bold"), 
-                        relief=tk.RAISED)
-        讲台标签.grid(row=0, column=2, columnspan=2, pady=3)  # 减少讲台上下间距
-        
-        # 初始化座位标签
+            self.导出按钮 = self.创建按钮(self.控制面板, "导出 Excel", self.导出到Excel)
+            self.导出按钮.grid(row=0, column=1, padx=8, pady=6)
+
+        self.设置排数按钮 = self.创建按钮(self.控制面板, "设置指定排数", self.设置指定排数)
+        self.清除设置按钮 = self.创建按钮(self.控制面板, "清除所有设置", self.清除设置, 危险=True)
+
+        # 座位区域卡片
+        self.座位框架 = tk.Frame(self.root, bg=self.卡片背景色, bd=0, highlightthickness=1, highlightbackground="#E6E6E6")
+        self.座位框架.pack(fill=tk.BOTH, expand=True, padx=16, pady=(0, 10))
+        self.座位内容框架 = tk.Frame(self.座位框架, bg=self.卡片背景色)
+        self.座位内容框架.pack(anchor="center", pady=(10, 10))
+
+        讲台标签 = tk.Label(
+            self.座位内容框架,
+            text="讲台",
+            font=self.正文粗体,
+            bg="#F5F9FF",
+            fg="#1F3A5B",
+            relief="flat",
+            width=12,
+            height=1
+        )
+        讲台标签.grid(row=0, column=2, columnspan=2, pady=(10, 8))
+
         self.座位标签 = []
         for i in range(self.座位行数):
             行标签 = []
             for j in range(self.座位列数):
-                # 最左边和最右边的列只有5个座位，中间空出第6个
                 if (j == 0 or j == 5) and i == 5:
-                    标签 = tk.Label(self.座位框架, text="", width=9, height=2)
+                    标签 = tk.Label(self.座位内容框架, text="", bg=self.卡片背景色)
                 else:
-                    标签 = tk.Label(self.座位框架, text="空座位", width=9, height=2,
-                             relief="solid", borderwidth=1, font=("微软雅黑", 9))
-                    标签.grid(row=i+1, column=j, padx=2, pady=1)  # 减少座位之间的间距
+                    标签 = self.创建座位标签(self.座位内容框架, i, j)
+                    标签.master.grid(row=i + 1, column=j, padx=4, pady=3)
                     标签.bind("<Button-1>", lambda e, row=i, col=j: self.处理座位点击(row, col))
                 行标签.append(标签)
             self.座位标签.append(行标签)
-        
-        # 添加方向标识
-        窗户标签 = tk.Label(self.座位框架, text="窗户", font=("微软雅黑", 10))
-        窗户标签.grid(row=self.座位行数+1, column=0, pady=3)  # 减少间距
-        
-        门标签 = tk.Label(self.座位框架, text="门", font=("微软雅黑", 10))
-        门标签.grid(row=self.座位行数+1, column=self.座位列数-1, pady=3)  # 减少间距
-        
-        # 添加底部状态栏
-        状态栏 = tk.Frame(self.root, height=20)  # 减少状态栏高度
-        状态栏.pack(side=tk.BOTTOM, fill=tk.X)
-        
-        self.状态标签 = tk.Label(状态栏, text="", font=("微软雅黑", 9))
-        self.状态标签.pack(side=tk.RIGHT, padx=10, pady=2)  # 减少状态栏内边距
+
+        窗户标签 = tk.Label(self.座位内容框架, text="窗户", font=self.正文常规, bg=self.卡片背景色, fg=self.次要文字色)
+        窗户标签.grid(row=self.座位行数 + 1, column=0, pady=(6, 10))
+
+        门标签 = tk.Label(self.座位内容框架, text="门", font=self.正文常规, bg=self.卡片背景色, fg=self.次要文字色)
+        门标签.grid(row=self.座位行数 + 1, column=self.座位列数 - 1, pady=(6, 10))
+
+        状态栏 = tk.Frame(self.root, bg="#FFFFFF", bd=0, highlightthickness=1, highlightbackground="#E6E6E6")
+        状态栏.pack(side=tk.BOTTOM, fill=tk.X, padx=16, pady=(0, 14))
+
+        self.状态标签 = tk.Label(状态栏, text="准备就绪", font=("Segoe UI", 9), bg="#FFFFFF", fg=self.次要文字色)
+        self.状态标签.pack(side=tk.RIGHT, padx=12, pady=6)
+
+    def 自适应窗口大小(self):
+        """根据当前界面内容设置合适的初始窗口大小，并保留可调整能力"""
+        self.root.update_idletasks()
+        目标宽度 = max(self.root.winfo_reqwidth() + 24, 760)
+        目标高度 = max(self.root.winfo_reqheight() + 24, 640)
+        self.root.geometry(f"{目标宽度}x{目标高度}")
+        self.root.minsize(目标宽度, 目标高度)
+
+    def 创建座位标签(self, parent, row, col):
+        """创建固定尺寸的座位卡片，避免因字体或文字长度导致外框尺寸变化"""
+        卡片 = tk.Frame(
+            parent,
+            width=self.座位卡片宽度,
+            height=self.座位卡片高度,
+            bg=self.座位默认背景,
+            highlightthickness=1,
+            highlightbackground="#E5E5E5",
+            highlightcolor="#E5E5E5",
+            bd=0
+        )
+        卡片.grid_propagate(False)
+        卡片.pack_propagate(False)
+
+        标签 = tk.Label(
+            卡片,
+            text="空座位",
+            relief="flat",
+            borderwidth=0,
+            font=self.座位字体,
+            bg=self.座位默认背景,
+            fg="#3A3A3A",
+            anchor="center",
+            justify="center"
+        )
+        标签.pack(fill=tk.BOTH, expand=True)
+
+        卡片.bind("<Button-1>", lambda e, r=row, c=col: self.处理座位点击(r, c))
+        return 标签
+
+    def 更新座位显示(self, row, col, text, *, 已分配=False, 选中=False):
+        """统一渲染座位文字与背景，保持外框尺寸和内部样式一致"""
+        背景色 = self.座位选中背景 if 选中 else self.座位默认背景
+        字体 = self.正文粗体 if 已分配 else self.座位字体
+        文字颜色 = "#202020" if 已分配 else "#3A3A3A"
+        标签 = self.座位标签[row][col]
+        标签.config(text=text, font=字体, fg=文字颜色, bg=背景色)
+        标签.master.config(bg=背景色)
+
+    def 创建按钮(self, parent, text, command, 主要=False, 危险=False):
+        """创建统一风格按钮"""
+        if 主要:
+            bg, fg = self.主强调色, "white"
+            active_bg, active_fg = "#106EBE", "white"
+        elif 危险:
+            bg, fg = "#C42B1C", "white"
+            active_bg, active_fg = "#A4262C", "white"
+        else:
+            bg, fg = "#FFFFFF", "#1F1F1F"
+            active_bg, active_fg = "#F3F3F3", "#1F1F1F"
+
+        return tk.Button(
+            parent,
+            text=text,
+            command=command,
+            font=self.正文常规,
+            relief="flat",
+            bd=0,
+            padx=14,
+            pady=6,
+            bg=bg,
+            fg=fg,
+            activebackground=active_bg,
+            activeforeground=active_fg,
+            cursor="hand2"
+        )
     
     def 随机分配座位(self):
         """执行随机座位分配算法
@@ -163,14 +272,7 @@ class 座位分配:
         返回:
             无返回值，但会更新UI显示和当前分配结果
         """
-        # 创建座位列表 - 生成所有可能的座位坐标
-        座位 = []
-        for i in range(self.座位行数):
-            for j in range(self.座位列数):
-                # 最左边和最右边的列只有5个座位(跳过第6行)
-                if (j == 0 or j == 5) and i == 5:
-                    continue
-                座位.append((i, j))
+        座位列表 = self.有效座位
         
         # 检查特殊安排是否可行 - 确保特殊安排不会超过可用座位数
         验证结果, 错误信息 = self.验证特殊安排()
@@ -183,7 +285,7 @@ class 座位分配:
         for _ in range(最大尝试次数):
             # 复制学生名单和座位列表 - 每次尝试都从原始状态开始
             剩余学生 = self.学生名单.copy()
-            剩余座位 = 座位.copy()
+            剩余座位 = 座位列表.copy()
             分配结果 = {}  # 学生 -> (行, 列)
             
             # 先处理有指定排数的学生 - 确保特殊安排优先满足
@@ -204,27 +306,23 @@ class 座位分配:
             
             # 随机分配剩余学生 - 无特殊安排的学生随机分配
             random.shuffle(剩余学生)
-            for 学生 in 剩余学生:
-                if not 剩余座位:
-                    break  # 座位已用完
-                座位 = random.choice(剩余座位)
+            random.shuffle(剩余座位)
+            for 学生, 座位 in zip(剩余学生, 剩余座位):
                 分配结果[学生] = 座位
-                剩余座位.remove(座位)
             
             # 检查是否成功分配所有学生
             if len(分配结果) == len(self.学生名单):
-                # 重置所有座位的背景色
-                for i in range(self.座位行数):
-                    for j in range(self.座位列数):
-                        if not ((j == 0 or j == 5) and i == 5):  # 跳过角落的空座位
-                            self.座位标签[i][j].config(bg="white")
+                # 清理所有有效座位并重置背景色
+                for i, j in self.有效座位:
+                    self.更新座位显示(i, j, "空座位")
                 
                 # 更新UI显示 - 在座位标签上显示学生姓名
                 for 学生, (行, 列) in 分配结果.items():
-                    self.座位标签[行][列].config(text=学生, font=("微软雅黑", 9, "bold"))
+                    self.更新座位显示(行, 列, 学生, 已分配=True)
                 
                 # 保存当前分配结果 - 用于后续导出操作
                 self.当前分配结果 = 分配结果.copy()
+                self.座位到学生 = {座位: 学生 for 学生, 座位 in 分配结果.items()}
                 
                 return  # 分配成功，退出方法
         
@@ -245,60 +343,59 @@ class 座位分配:
         """从学生名单文件加载学生列表
         
         功能:
-        - 尝试从学生名单.json文件加载学生列表
-        - 如果文件不存在或格式错误，则使用默认学生名单
+        - 仅从 data/学生名单.json 文件加载学生列表
+        - 文件不存在、为空或格式错误时直接报错
         
         返回:
             list: 学生名单列表
         """
         学生名单文件 = "学生名单.json"
-        默认学生名单 = [
-            "敖康涵", "崔子傲", "杜欣怡", "冯禹栋", "弓子航", 
-            "郭奕诚", "李秉锡", "李凡奇", "李其东", "李星哲", 
-            "李一诺", "刘锦溪", "刘睿忱", "刘奕贤", "倪欣彤", 
-            "牛新迪", "唐晚玉", "田煦禾", "王鼎宸", "王柳嘉", 
-            "王培源", "王烁妍", "王一冉", "王子辰", "吴金航", 
-            "许泽玉", "薛旭然", "杨紫斐", "张浩然", "张颀萱", 
-            "张依依", "张译文", "赵鑫炜", "赵一诺"
-        ]
-        
+
+        # 尝试获取打包后的路径
         try:
-            # 尝试获取打包后的路径
-            try:
-                学生名单路径 = 获取资源路径(学生名单文件)
-            except:
-                学生名单路径 = 学生名单文件
-                
-            if os.path.exists(学生名单路径):
-                with open(学生名单路径, "r", encoding="utf-8") as f:
-                    return json.load(f)
-            else:
-                # 如果文件不存在，创建默认学生名单文件
-                with open(学生名单路径, "w", encoding="utf-8") as f:
-                    json.dump(默认学生名单, f, ensure_ascii=False, indent=4)
-                return 默认学生名单
+            学生名单路径 = 获取资源路径(学生名单文件)
+        except:
+            学生名单路径 = 学生名单文件
+
+        if not os.path.exists(学生名单路径):
+            messagebox.showerror("错误", f"未找到学生名单文件：\n{学生名单路径}")
+            raise FileNotFoundError(f"未找到学生名单文件: {学生名单路径}")
+
+        try:
+            with open(学生名单路径, "r", encoding="utf-8") as f:
+                数据 = json.load(f)
+        except json.JSONDecodeError as e:
+            messagebox.showerror("错误", f"学生名单文件格式错误: {str(e)}")
+            raise ValueError("学生名单文件格式错误") from e
+        except PermissionError as e:
+            messagebox.showerror("错误", "没有权限读取学生名单文件")
+            raise PermissionError("没有权限读取学生名单文件") from e
         except Exception as e:
-            print(f"加载学生名单时出错: {e}")
-            return 默认学生名单
+            messagebox.showerror("错误", f"加载学生名单失败: {str(e)}")
+            raise RuntimeError("加载学生名单失败") from e
+
+        if not isinstance(数据, list) or not 数据:
+            messagebox.showerror("错误", "学生名单文件必须是非空数组")
+            raise ValueError("学生名单文件必须是非空数组")
+
+        if not all(isinstance(学生, str) and 学生.strip() for 学生 in 数据):
+            messagebox.showerror("错误", "学生名单文件中的每一项都必须是非空姓名字符串")
+            raise ValueError("学生名单文件中的每一项都必须是非空姓名字符串")
+
+        return [学生.strip() for 学生 in 数据]
             
     def 加载特殊安排(self):
         """从JSON文件加载特殊安排
         
         功能:
-        - 尝试从特殊安排.json文件加载特殊座位安排
+        - 尝试从 data/特殊安排.json 文件加载特殊座位安排
         - 如果文件不存在或格式错误，则使用空字典
-        - 兼容PyInstaller打包后的环境
         
         返回:
             无返回值，但会更新self.指定排数安排
         """
         特殊安排文件 = "特殊安排.json"
-        
-        # 尝试获取打包后的路径
-        try:
-            特殊安排路径 = 获取资源路径(特殊安排文件)
-        except:
-            特殊安排路径 = 特殊安排文件
+        特殊安排路径 = 获取资源路径(特殊安排文件)
             
         if not os.path.exists(特殊安排路径):
             # 如果文件不存在，创建一个空的特殊安排文件
@@ -340,12 +437,8 @@ class 座位分配:
         特殊安排文件 = "特殊安排.json"
         
         try:
-            # 尝试获取打包后的路径
-            try:
-                特殊安排路径 = 获取资源路径(特殊安排文件)
-            except:
-                特殊安排路径 = 特殊安排文件
-            
+            os.makedirs(os.path.dirname(获取资源路径(特殊安排文件)), exist_ok=True)
+            特殊安排路径 = 获取资源路径(特殊安排文件)
             with open(特殊安排路径, "w", encoding="utf-8") as f:
                 json.dump(数据, f, ensure_ascii=False, indent=4)
         except Exception as e:
@@ -398,7 +491,11 @@ class 座位分配:
         for i in range(self.座位行数):
             for j in range(self.座位列数):
                 if not ((j == 0 or j == 5) and i == 5):
-                    self.座位标签[i][j].config(text="空座位", font=("微软雅黑", 9))
+                    self.更新座位显示(i, j, "空座位")
+
+        # 清空当前分配缓存
+        self.当前分配结果 = {}
+        self.座位到学生 = {}
         
         # 保存设置
         self.保存特殊安排()
@@ -424,7 +521,7 @@ class 座位分配:
         指定排数学生数 = len(self.指定排数安排)
         
         # 计算总座位数 - 减去两个角落没有的座位
-        总座位数 = self.座位行数 * self.座位列数 - 2
+        总座位数 = len(self.有效座位)
         
         # 检查学生数量是否超过可用座位数
         if 指定排数学生数 > 总座位数:
@@ -435,7 +532,8 @@ class 座位分配:
     def 加载管理员密码(self):
         """从配置文件加载管理员密码"""
         try:
-            with open("配置.json", "r", encoding="utf-8") as f:
+            配置路径 = 获取资源路径("配置.json")
+            with open(配置路径, "r", encoding="utf-8") as f:
                 配置 = json.load(f)
                 return 配置.get("管理员密码", "admin")  # 默认密码为admin
         except:
@@ -564,11 +662,7 @@ class 座位分配:
             return
             
         # 获取点击的座位上的学生
-        当前学生 = None
-        for 学生, (学生行, 学生列) in self.当前分配结果.items():
-            if 学生行 == row and 学生列 == col:
-                当前学生 = 学生
-                break
+        当前学生 = self.座位到学生.get((row, col))
                 
         if not 当前学生:
             self.状态标签.config(text="请点击有学生的座位")
@@ -579,7 +673,7 @@ class 座位分配:
             self.第一次点击 = (当前学生, row, col)
             self.状态标签.config(text=f"已选择{当前学生}，请选择要交换的学生")
             # 高亮显示选中的座位
-            self.座位标签[row][col].config(bg="lightblue")
+            self.更新座位显示(row, col, 当前学生, 已分配=True, 选中=True)
             return
             
         # 如果是第二次点击
@@ -616,21 +710,28 @@ class 座位分配:
         # 更新当前分配结果
         self.当前分配结果[学生1] = (行2, 列2)
         self.当前分配结果[学生2] = (行1, 列1)
+        self.座位到学生[(行1, 列1)] = 学生2
+        self.座位到学生[(行2, 列2)] = 学生1
         
         # 更新界面显示
-        self.座位标签[行1][列1].config(text=学生2)
-        self.座位标签[行2][列2].config(text=学生1)
+        self.更新座位显示(行1, 列1, 学生2, 已分配=True)
+        self.更新座位显示(行2, 列2, 学生1, 已分配=True)
         
         # 重置所有座位的背景色
-        for i in range(self.座位行数):
-            for j in range(self.座位列数):
-                if not ((j == 0 or j == 5) and i == 5):  # 跳过角落的空座位
-                    self.座位标签[i][j].config(bg="white")
+        for i, j in self.有效座位:
+            if (i, j) in self.座位到学生:
+                self.更新座位显示(i, j, self.座位到学生[(i, j)], 已分配=True)
+            else:
+                self.更新座位显示(i, j, "空座位")
         
         # 更新状态栏
         self.状态标签.config(text=f"已成功交换{学生1}和{学生2}的座位")
 
 if __name__ == "__main__":
     root = tk.Tk()
-    app = 座位分配(root)
+    try:
+        app = 座位分配(root)
+    except Exception:
+        root.destroy()
+        raise SystemExit(1)
     root.mainloop()

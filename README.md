@@ -5,12 +5,12 @@
 
 ## 主要文件说明
 - `座位分配.py`：主程序，负责座位分配逻辑。
-- `学生名单.json`：包含所有学生的基本信息。
-- `特殊安排.json`：记录需要特殊安排的学生及其座位要求。
-- `配置.json`：系统配置文件。
-- `build.py`：用于打包或构建项目。
+- `data/学生名单.json`：包含所有学生的基本信息。
+- `data/特殊安排.json`：记录需要特殊安排的学生及其座位要求。
+- `data/配置.json`：系统配置文件。
+- `scripts/build.py`：用于打包或构建项目。
 - `requirements.txt`：项目依赖库列表。
-- `version.txt`：版本信息。
+- `scripts/version.txt`：版本信息。
 
 ## 使用方法
 1. 安装依赖：
@@ -21,20 +21,25 @@
    ```bash
    python 座位分配.py
    ```
-3. 根据提示输入或修改相关配置和名单文件。
+3. 根据提示修改 `data/` 目录中的配置和名单文件。
 
 ## 打包说明
-如需生成可执行文件，可使用 `build.py` 或参考 `座位分配系统.spec`。
+如需生成可执行文件，可使用 `python scripts/build.py` 或参考 `scripts/座位分配系统.spec`。
+打包完成后，程序会在 `dist/` 下生成 exe，并保留外部 `data/` 目录供读取和写入。
 
 ## 目录结构
 ```
-├── build.py
+├── data/
+│   ├── 学生名单.json
+│   ├── 特殊安排.json
+│   └── 配置.json
 ├── requirements.txt
-├── version.txt
-├── 学生名单.json
+├── scripts/
+│   ├── build.py
+│   ├── version.txt
+│   └── 座位分配系统.spec
 ├── 座位分配.py
-├── 座位分配系统.spec
-├── 特殊安排.json
-├── 配置.json
-└── build/座位分配系统/
+├── README.md
+├── build/
+└── dist/
 ```
